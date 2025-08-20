@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import logging
 import os
@@ -73,6 +74,10 @@ POLL_QUESTION_TEMPLATE = "Как продолжится история?"
 MAX_CONTEXT_CHARS = 15000
 MAX_POST_CHARS = 500
 STEP_INTERVAL_SECONDS = int(os.getenv("STEP_INTERVAL_SECONDS", "60"))
+
+# Опциональное генерация изображений
+ENABLE_IMAGE_GEN = os.getenv("ENABLE_IMAGE_GEN", "false").lower() in ("1", "true", "yes")
+GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "imagen-3.0-generate-002")
 
 # Инициализация клиента Gemini (берёт ключ из GEMINI_API_KEY)
 client = genai.Client()
@@ -229,6 +234,23 @@ def generate_poll_options(full_story_context: str) -> Optional[List[str]]:
         return None
 
 
+# ------------------ Генерация изображения ------------------
+def generate_image_bytes_from_text(description: str) -> Optional[bytes]:
+    """Пытаемся сгенерировать изображение по тексту и вернуть байты."""
+    if not description:
+        return None
+    try:
+        resp = client.models.generate_images(
+            model=GEMINI_IMAGE_MODEL,
+            prompt=description,
+        )
+        if getattr(resp, "images", None):
+            return base64.b64decode(resp.images[0].data)
+    except Exception as e:
+        logging.error(f"Не удалось сгенерировать картинку: {e}")
+    return None
+
+
 # ------------------ Опрос: определение победителя ------------------
 async def get_poll_winner(bot: Bot, chat_id: str | int, message_id: int) -> Optional[str]:
     if message_id is None:
@@ -301,8 +323,35 @@ async def run_story_step():
             new_part = generate_story_continuation(current_story, next_prompt)
             if not new_part or not new_part.strip():
                 raise RuntimeError("Не удалось сгенерировать продолжение истории.")
-            await bot.send_message(chat_id=CHANNEL_ID, text=new_part)
-            current_story += ("\n\n" if not current_story.endswith("\n\n") else "") + new_part
+            send_text_first = True  # можно поменять порядок, как нравится
+
+            if ENABLE_IMAGE_GEN:
+                # используем свежесгенерованный кусок как описание сцены
+                img_bytes = generate_image_bytes_from_text(new_part)
+            else:
+                img_bytes = None
+
+            try:
+                if send_text_first:
+                    await bot.send_message(chat_id=CHANNEL_ID, text=new_part)
+
+                if img_bytes:
+                    # caption у фото в Telegram ограничен, поэтому лучше без него:
+                    await bot.send_photo(chat_id=CHANNEL_ID, photo=BytesIO(img_bytes))
+                elif not send_text_first:
+                    # если хотели сначала картинку, а её нет — отправим текст
+                    await bot.send_message(chat_id=CHANNEL_ID, text=new_part)
+
+                current_story += ("\n\n" if not current_story.endswith("\n\n") else "") + new_part
+
+            except telegram.error.TelegramError as e:
+                logging.error(f"Не удалось отправить пост/картинку: {e}")
+                # на всякий случай отправим текст, если ничего не ушло
+                try:
+                    if not send_text_first and not img_bytes:
+                        await bot.send_message(chat_id=CHANNEL_ID, text=new_part)
+                except Exception:
+                    pass
 
         # 3) Генерируем и публикуем опрос
         logging.info("Генерируем варианты опроса…")
