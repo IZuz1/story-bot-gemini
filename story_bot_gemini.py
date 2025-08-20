@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import random
+from io import BytesIO
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
