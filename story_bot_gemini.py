@@ -15,20 +15,19 @@ from google.genai import types
 """
 Story Bot (Gemini, no images)
 ----------------------------
-Одноразовый скрипт, который:
+Скрипт, который в бесконечном цикле ведёт интерактивную историю:
 - хранит состояние истории в story_state.json
-- постит часть истории в канал
+- каждые STEP_INTERVAL_SECONDS (по умолчанию 60) постит часть истории в канал
 - создаёт опрос из 4 вариантов (радикально разных)
-- при следующем запуске закрывает прошлый опрос, берёт победителя и продолжает историю
-
-Запускай периодически (cron / Render cron / GitHub Actions / systemd timer), чтобы история двигалась вперёд.
+- перед публикацией закрывает прошлый опрос, берёт победителя и продолжает историю
 
 ENV (рекомендуется):
-  BOT_TOKEN         : токен Телеграм-бота
-  CHANNEL_ID        : @username канала или chat id (например, -100123456789)
-  GEMINI_API_KEY    : ключ Gemini API
-  GEMINI_MODEL      : по умолчанию gemini-2.5-flash
-  INITIAL_STORY_IDEA: стартовый текст истории (опц., иначе дефолт ниже)
+  BOT_TOKEN          : токен Телеграм-бота
+  CHANNEL_ID         : @username канала или chat id (например, -100123456789)
+  GEMINI_API_KEY     : ключ Gemini API
+  GEMINI_MODEL       : по умолчанию gemini-2.5-flash
+  INITIAL_STORY_IDEA : стартовый текст истории (опц., иначе дефолт ниже)
+  STEP_INTERVAL_SECONDS: интервал между шагами (сек.), по умолчанию 60
 
 Render (Background Worker):
   Build: pip install -r requirements.txt
@@ -64,6 +63,7 @@ INITIAL_STORY_IDEA = os.getenv(
 STATE_FILE = Path(__file__).parent / "story_state.json"
 POLL_QUESTION_TEMPLATE = "Как продолжится история?"
 MAX_CONTEXT_CHARS = 15000
+STEP_INTERVAL_SECONDS = int(os.getenv("STEP_INTERVAL_SECONDS", "60"))
 
 # Инициализация клиента Gemini (берёт ключ из GEMINI_API_KEY)
 client = genai.Client()
@@ -252,10 +252,6 @@ async def get_poll_winner(bot: Bot, chat_id: str | int, message_id: int) -> Opti
 
 # ------------------ Основной шаг истории ------------------
 async def run_story_step():
-    if not validate_config():
-        logging.critical("Конфигурация некорректна. Выходим.")
-        return
-
     logging.info("--- Шаг истории ---")
     state = load_state()
     current_story: str = state.get("current_story", "")
@@ -335,12 +331,22 @@ async def run_story_step():
         logging.error(f"Непредвиденная ошибка: {e}", exc_info=True)
 
 
+async def run_forever():
+    """Бесконечный цикл шагов истории."""
+    while True:
+        await run_story_step()
+        logging.info(
+            f"Ждём {STEP_INTERVAL_SECONDS} сек. до следующего шага истории…"
+        )
+        await asyncio.sleep(STEP_INTERVAL_SECONDS)
+
+
 # ------------------ Запуск ------------------
 if __name__ == "__main__":
     logging.info("Старт скрипта.")
     if not validate_config():
         logging.critical("Проверь BOT_TOKEN / CHANNEL_ID / GEMINI_API_KEY. Выходим.")
     else:
-        logging.info("Конфигурация ок. Запускаем шаг истории.")
-        asyncio.run(run_story_step())
+        logging.info("Конфигурация ок. Запускаем цикл истории.")
+        asyncio.run(run_forever())
     logging.info("Завершение скрипта.")
