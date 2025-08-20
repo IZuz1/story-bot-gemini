@@ -49,6 +49,8 @@ CHANNEL_ID = os.getenv("CHANNEL_ID", "")
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
+GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-1.5-flash")
+
 # Стартовая идея (можно переопределить через ENV)
 INITIAL_STORY_IDEA = os.getenv(
     "INITIAL_STORY_IDEA",
@@ -218,6 +220,36 @@ def generate_poll_options(full_story_context: str) -> Optional[List[str]]:
         return options
     except Exception as e:
         logging.error(f"Ошибка Gemini при генерации вариантов опроса: {e}")
+        return None
+
+
+# ------------------ LLM: генерация изображения ------------------
+def generate_image_bytes_from_text(prompt: str) -> Optional[bytes]:
+    """
+    Просим Gemini сгенерировать изображение по текстовому описанию.
+    Возвращает bytes (готово для Telegram send_photo), либо None.
+    """
+    try:
+        resp = client.models.generate_content(
+            model=GEMINI_IMAGE_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                # важно: просим и текст, и картинку (без этого изображение не придёт)
+                response_modalities=['TEXT', 'IMAGE'],
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
+        if not resp or not resp.candidates:
+            return None
+
+        # Ищем первую часть с inline_data (там байты изображения)
+        for part in resp.candidates[0].content.parts:
+            if getattr(part, "inline_data", None) and getattr(part.inline_data, "data", None):
+                return part.inline_data.data  # bytes
+
+        return None
+    except Exception as e:
+        logging.error(f"Ошибка Gemini при генерации изображения: {e}")
         return None
 
 
