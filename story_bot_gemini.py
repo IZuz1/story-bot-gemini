@@ -63,6 +63,7 @@ INITIAL_STORY_IDEA = os.getenv(
 STATE_FILE = Path(__file__).parent / "story_state.json"
 POLL_QUESTION_TEMPLATE = "Как продолжится история?"
 MAX_CONTEXT_CHARS = 15000
+MAX_POST_CHARS = 500
 STEP_INTERVAL_SECONDS = int(os.getenv("STEP_INTERVAL_SECONDS", "60"))
 
 # Инициализация клиента Gemini (берёт ключ из GEMINI_API_KEY)
@@ -134,12 +135,15 @@ def _extract_json(text: str) -> Optional[Dict[str, Any]]:
 
 # ------------------ LLM: история ------------------
 def generate_story_continuation(current_story: str, user_choice: str) -> Optional[str]:
-    """Просим модель выдать три абзаца продолжения (JSON с полями reasoning, story_part)."""
+    """Просим модель выдать три коротких абзаца продолжения.
+    Каждый абзац — 1-2 предложения, общий текст не длиннее MAX_POST_CHARS.
+    Возвращается JSON с полями reasoning и story_part."""
     truncated = current_story[-MAX_CONTEXT_CHARS:]
 
     system_instruction = (
         "Ты — креативный писатель на русском. Продолжай интерактивную историю ТРЕМЯ абзацами,\n"
         "учитывая победивший вариант опроса. Каждый абзац отделяй пустой строкой.\n"
+        f"Абзацы короткие (1-2 предложения). Общая длина не более {MAX_POST_CHARS} символов.\n"
         "Избегай клише и 'AI slop'. Не меняй стиль рассказчика без причины.\n\n"
         "Формат ответа: ВОЗВРАЩАЙ только JSON-объект без пояснений,\n"
         "с полями: {\"reasoning\": string, \"story_part\": string}. Без Markdown и кодовых блоков."
@@ -148,7 +152,7 @@ def generate_story_continuation(current_story: str, user_choice: str) -> Optiona
     user_prompt = (
         f"Предыдущая история:\n{truncated}\n\n"
         f"Выбор пользователя: '{user_choice}'\n\n"
-        f"Верни только JSON c полями reasoning и story_part."
+        f"Верни только JSON c полями reasoning и story_part. story_part <= {MAX_POST_CHARS} символов."
     )
 
     try:
@@ -167,6 +171,7 @@ def generate_story_continuation(current_story: str, user_choice: str) -> Optiona
             logging.error("Модель вернула не-JSON или пустой текст")
             return None
         part = (data.get("story_part") or "").strip()
+        part = part[:MAX_POST_CHARS]
         return part or None
     except Exception as e:
         logging.error(f"Ошибка Gemini при генерации истории: {e}")
