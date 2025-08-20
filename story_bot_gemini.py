@@ -26,6 +26,8 @@ ENV (рекомендуется):
   CHANNEL_ID         : @username канала или chat id (например, -100123456789)
   GEMINI_API_KEY     : ключ Gemini API
   GEMINI_MODEL       : по умолчанию gemini-2.5-flash
+  ENABLE_IMAGE_GEN   : если "true", включить генерацию изображений (по умолчанию false)
+  GEMINI_IMAGE_MODEL : модель для генерации изображений (по умолчанию gemini-2.0-flash-preview-image-generation)
   INITIAL_STORY_IDEA : стартовый текст истории (опц., иначе дефолт ниже)
   STEP_INTERVAL_SECONDS: интервал между шагами (сек.), по умолчанию 60
 
@@ -48,6 +50,11 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 CHANNEL_ID = os.getenv("CHANNEL_ID", "")
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+ENABLE_IMAGE_GEN = os.getenv("ENABLE_IMAGE_GEN", "false").lower() == "true"
+GEMINI_IMAGE_MODEL = os.getenv(
+    "GEMINI_IMAGE_MODEL", "gemini-2.0-flash-preview-image-generation"
+)
 
 # Стартовая идея (можно переопределить через ENV)
 INITIAL_STORY_IDEA = os.getenv(

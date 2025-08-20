@@ -23,6 +23,8 @@ python story_bot_gemini.py
 - `CHANNEL_ID` — `@username` канала (бот должен быть админом) или chat id (`-100…`)
 - `GEMINI_API_KEY` — ключ Gemini (Google AI Studio)
 - `GEMINI_MODEL` — модель (по умолчанию `gemini-2.5-flash`)
+- `ENABLE_IMAGE_GEN` — если `"true"`, включить генерацию изображений (по умолчанию `false`)
+- `GEMINI_IMAGE_MODEL` — модель для генерации изображений (по умолчанию `gemini-2.0-flash-preview-image-generation`)
 - `INITIAL_STORY_IDEA` — начальный текст истории (опционально)
 - `STEP_INTERVAL_SECONDS` — интервал между публикациями (в секундах, по умолчанию `60`)
 
